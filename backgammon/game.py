@@ -315,17 +315,17 @@ class Game:
         return False
 
     def draw_col(self,i,col):
-        print "|",
+        print("|",end=" ")
         if i==-2:
             if col<10:
-                print "",
-            print str(col),
+                print("",end=" ")
+            print(str(col),end=" ")
         elif i==-1:
-            print "--",
+            print("--",end=" ")
         elif len(self.grid[col])>i:
-            print " "+self.grid[col][i],
+            print(" " + self.grid[col][i], end=" ")
         else:
-            print "  ",
+            print("  ",end=" ")
 
     def draw(self):
         os.system('clear')
@@ -333,19 +333,19 @@ class Game:
         for i in range(-2,largest):
             for col in range(len(self.grid)/2,len(self.grid)):
                 self.draw_col(i,col)
-            print "|"
-        print
-        print
+            print("|")
+        print("")
+        print("")
         largest = max([len(self.grid[i]) for i in range(len(self.grid)/2)])
         for i in range(largest-1,-3,-1):
             for col in range(len(self.grid)/2-1,-1,-1):
                 self.draw_col(i,col)
-            print "|"
+            print("|")
         for t in self.players:
-            print "<Player %s>  Off Board : "%(t),
+            print("<Player " + t + ">  Off Board : ",end=" ")
             for piece in self.off_pieces[t]:
-                print t+'',
-            print "   Bar : ",
+                print(t, end=" ")
+            print("   Bar : ",end=" ")
             for piece in self.bar_pieces[t]:
-                print t+'',
+                print(t,end=" ")
             print

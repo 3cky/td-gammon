@@ -15,7 +15,7 @@ class HumanAgent(object):
                 mv1 = raw_input('Please enter a move "<location start>,<location end>" ("%s" for on the board, "%s" for off the board): ' % (Game.ON, Game.OFF))
                 mv1 = self.get_formatted_move(mv1)
                 if not mv1:
-                    print 'Bad format enter e.g. "3,4"'
+                    print('Bad format enter e.g. "3,4"')
                 else:
                     break
 
@@ -26,7 +26,7 @@ class HumanAgent(object):
                     break
                 mv2 = self.get_formatted_move(mv2)
                 if not mv2:
-                    print 'Bad format enter e.g. "3,4"'
+                    print('Bad format enter e.g. "3,4"')
                 else:
                     break
 
@@ -41,7 +41,7 @@ class HumanAgent(object):
                 move = move[::-1]
                 return move
             else:
-                print "You can't play that move"
+                print("You can't play that move")
 
         return None
 
