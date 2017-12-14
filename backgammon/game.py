@@ -329,16 +329,16 @@ class Game:
 
     def draw(self):
         os.system('clear')
-        largest = max([len(self.grid[i]) for i in range(len(self.grid)/2,len(self.grid))])
+        largest = max([len(self.grid[i]) for i in range(len(self.grid)//2,len(self.grid))])
         for i in range(-2,largest):
-            for col in range(len(self.grid)/2,len(self.grid)):
+            for col in range(len(self.grid)//2,len(self.grid)):
                 self.draw_col(i,col)
             print("|")
         print("")
         print("")
-        largest = max([len(self.grid[i]) for i in range(len(self.grid)/2)])
+        largest = max([len(self.grid[i]) for i in range(len(self.grid)//2)])
         for i in range(largest-1,-3,-1):
-            for col in range(len(self.grid)/2-1,-1,-1):
+            for col in range(len(self.grid)//2-1,-1,-1):
                 self.draw_col(i,col)
             print("|")
         for t in self.players:
