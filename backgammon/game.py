@@ -4,6 +4,7 @@ import time
 import random
 import numpy as np
 
+
 class Game:
 
     LAYOUT = "0-2-o,5-5-x,7-3-x,11-5-o,12-5-x,16-3-o,18-5-o,23-2-x"
@@ -13,10 +14,12 @@ class Game:
     ON = 'on'
     TOKENS = ['x', 'o']
 
-    def __init__(self, layout=LAYOUT, grid=None, off_pieces=None, bar_pieces=None, num_pieces=None, players=None):
+    def __init__(self, layout=LAYOUT, grid=None, off_pieces=None, bar_pieces=None,
+                 num_pieces=None, players=None):
         """
         Define a new game object
         """
+        self.num_steps = 0
         self.die = Game.QUAD
         self.layout = layout
         if grid:
@@ -135,7 +138,6 @@ class Game:
             else:
                 self.grid[s].append(piece)
 
-
     def get_actions(self, roll, player, nodups=False):
         """
         Get set of all possible move tuples
@@ -147,7 +149,7 @@ class Game:
             start = None
 
         r1, r2 = roll
-        if r1 == r2: # doubles
+        if r1 == r2:  # doubles
             i = 4
             # keep trying until we find some moves
             while not moves and i > 0:
@@ -164,7 +166,7 @@ class Game:
         return moves
 
     def find_moves(self, rs, player, move, moves, start=None):
-        if len(rs)==0:
+        if len(rs) == 0:
             moves.add(move)
             return
         r, rs = rs[0], rs[1:]
@@ -173,7 +175,7 @@ class Game:
             if self.can_onboard(player, r):
                 piece = self.bar_pieces[player].pop()
                 bar_piece = None
-                if len(self.grid[r - 1]) == 1 and self.grid[r - 1][-1]!=player:
+                if len(self.grid[r - 1]) == 1 and self.grid[r - 1][-1] != player:
                     bar_piece = self.grid[r - 1].pop()
 
                 self.grid[r - 1].append(piece)
@@ -255,7 +257,8 @@ class Game:
         """
         Get winner.
         """
-        return 0 if len(self.off_pieces[self.players[0]]) == self.num_pieces[self.players[0]] else 1
+        return 0 if len(self.off_pieces[self.players[0]]) == self.num_pieces[self.players[0]] \
+            else 1
 
     def is_over(self):
         """
@@ -314,38 +317,38 @@ class Game:
                 return True
         return False
 
-    def draw_col(self,i,col):
-        print("|",end=" ")
-        if i==-2:
-            if col<10:
-                print("",end=" ")
-            print(str(col),end=" ")
-        elif i==-1:
-            print("--",end=" ")
-        elif len(self.grid[col])>i:
+    def draw_col(self, i, col):
+        print("|", end=" ")
+        if i == -2:
+            if col < 10:
+                print("", end=" ")
+            print(str(col), end=" ")
+        elif i == -1:
+            print("--", end=" ")
+        elif len(self.grid[col]) > i:
             print(" " + self.grid[col][i], end=" ")
         else:
-            print("  ",end=" ")
+            print("  ", end=" ")
 
     def draw(self):
         os.system('clear')
-        largest = max([len(self.grid[i]) for i in range(len(self.grid)//2,len(self.grid))])
-        for i in range(-2,largest):
-            for col in range(len(self.grid)//2,len(self.grid)):
-                self.draw_col(i,col)
+        largest = max([len(self.grid[i]) for i in range(len(self.grid) // 2, len(self.grid))])
+        for i in range(-2, largest):
+            for col in range(len(self.grid) // 2, len(self.grid)):
+                self.draw_col(i, col)
             print("|")
         print("")
         print("")
-        largest = max([len(self.grid[i]) for i in range(len(self.grid)//2)])
-        for i in range(largest-1,-3,-1):
-            for col in range(len(self.grid)//2-1,-1,-1):
-                self.draw_col(i,col)
+        largest = max([len(self.grid[i]) for i in range(len(self.grid) // 2)])
+        for i in range(largest - 1, -3, -1):
+            for col in range(len(self.grid) // 2 - 1, -1, -1):
+                self.draw_col(i, col)
             print("|")
         for t in self.players:
-            print("<Player " + t + ">  Off Board : ",end=" ")
-            for piece in self.off_pieces[t]:
+            print("<Player " + t + ">  Off Board : ", end=" ")
+            for _piece in self.off_pieces[t]:
                 print(t, end=" ")
-            print("   Bar : ",end=" ")
-            for piece in self.bar_pieces[t]:
-                print(t,end=" ")
+            print("   Bar : ", end=" ")
+            for _piece in self.bar_pieces[t]:
+                print(t, end=" ")
             print

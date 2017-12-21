@@ -1,5 +1,6 @@
 from ..game import Game
 
+
 class HumanAgent(object):
     def __init__(self, player):
         self.player = player
@@ -12,7 +13,9 @@ class HumanAgent(object):
 
         while True:
             while True:
-                mv1 = input('Please enter a move "<location start>,<location end>" ("%s" for on the board, "%s" for off the board): ' % (Game.ON, Game.OFF))
+                mv1 = input('Please enter a move "<location start>,<location end>'
+                            '("%s" for on the board, "%s" for off the board): ' %
+                            (Game.ON, Game.OFF))
                 mv1 = self.get_formatted_move(mv1)
                 if not mv1:
                     print('Bad format enter e.g. "3,4"')

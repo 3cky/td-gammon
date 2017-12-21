@@ -1,5 +1,3 @@
-import numpy as np
-
 class TDAgent(object):
 
     def __init__(self, player, model):

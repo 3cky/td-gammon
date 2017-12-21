@@ -10,17 +10,20 @@ from backgammon.agents.human_agent import HumanAgent
 from backgammon.agents.random_agent import RandomAgent
 from backgammon.agents.td_gammon_agent import TDAgent
 
+
 # helper to initialize a weight and bias variable
 def weight_bias(shape):
     W = tf.Variable(tf.truncated_normal(shape, stddev=0.1), name='weight')
     b = tf.Variable(tf.constant(0.1, shape=shape[-1:]), name='bias')
     return W, b
 
+
 # helper to create a dense, fully-connected layer
 def dense_layer(x, shape, activation, name):
     with tf.variable_scope(name):
         W, b = weight_bias(shape)
         return activation(tf.matmul(x, W) + b, name='activation')
+
 
 class Model(object):
     def __init__(self, sess, model_path, summary_path, checkpoint_path, restore=False):
@@ -33,12 +36,12 @@ class Model(object):
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # lambda decay
-        lamda = tf.maximum(0.7, tf.train.exponential_decay(0.9, self.global_step, \
-            30000, 0.96, staircase=True), name='lambda')
+        lamda = tf.maximum(0.7, tf.train.exponential_decay(
+            0.9, self.global_step, 30000, 0.96, staircase=True), name='lambda')
 
         # learning rate decay
-        alpha = tf.maximum(0.01, tf.train.exponential_decay(0.1, self.global_step, \
-            40000, 0.96, staircase=True), name='alpha')
+        alpha = tf.maximum(0.01, tf.train.exponential_decay(
+            0.1, self.global_step, 40000, 0.96, staircase=True), name='alpha')
 
         tf.summary.scalar('lambda', lamda)
         tf.summary.scalar('alpha', alpha)
@@ -53,8 +56,10 @@ class Model(object):
         self.V_next = tf.placeholder('float', [1, layer_size_output], name='V_next')
 
         # build network arch. (just 2 layers with sigmoid activation)
-        prev_y = dense_layer(self.x, [layer_size_input, layer_size_hidden], tf.sigmoid, name='layer1')
-        self.V = dense_layer(prev_y, [layer_size_hidden, layer_size_output], tf.sigmoid, name='layer2')
+        prev_y = dense_layer(self.x, [layer_size_input, layer_size_hidden],
+                             tf.sigmoid, name='layer1')
+        self.V = dense_layer(prev_y, [layer_size_hidden, layer_size_output],
+                             tf.sigmoid, name='layer2')
 
         # watch the individual value predictions over time
         tf.summary.scalar('V_next', tf.reduce_sum(self.V_next))
@@ -67,7 +72,8 @@ class Model(object):
         loss_op = tf.reduce_mean(tf.square(self.V_next - self.V), name='loss')
 
         # check if the model predicts the correct state
-        accuracy_op = tf.reduce_sum(tf.cast(tf.equal(tf.round(self.V_next), tf.round(self.V)), dtype='float'), name='accuracy')
+        accuracy_op = tf.reduce_sum(tf.cast(tf.equal(tf.round(self.V_next), tf.round(self.V)),
+                                            dtype='float'), name='accuracy')
 
         # track the number of steps and average loss for the current game
         with tf.variable_scope('game'):
@@ -170,7 +176,7 @@ class Model(object):
             self.saver.restore(self.sess, latest_checkpoint_path)
 
     def get_output(self, x):
-        return self.sess.run(self.V, feed_dict={ self.x: x })
+        return self.sess.run(self.V, feed_dict={self.x: x})
 
     def play(self):
         game = Game.new()
@@ -186,15 +192,17 @@ class Model(object):
             winners[winner] += 1
 
             winners_total = sum(winners)
-            print("[Episode %d] %s (%s) vs %s (%s) %d:%d of %d games (%.2f%%)" % (episode, \
-                players[0].name, players[0].player, \
-                players[1].name, players[1].player, \
-                winners[0], winners[1], winners_total, \
-                (winners[0] / winners_total) * 100.0))
+            print("[Episode %d] %s (%s) vs %s (%s) %d:%d of %d games (%.2f%%)" %
+                  (episode,
+                   players[0].name, players[0].player,
+                   players[1].name, players[1].player,
+                   winners[0], winners[1], winners_total,
+                   (winners[0] / winners_total) * 100.0))
 
     def train(self):
         tf.train.write_graph(self.sess.graph_def, self.model_path, 'td_gammon.pb', as_text=False)
-        summary_writer = tf.summary.FileWriter('{0}{1}'.format(self.summary_path, int(time.time()), self.sess.graph_def))
+        summary_writer = tf.summary.FileWriter('{0}{1}'.format(self.summary_path, int(time.time()),
+                                                               self.sess.graph_def))
 
         # the agent plays against itself, making the best move for each player
         players = [TDAgent(Game.TOKENS[0], self), TDAgent(Game.TOKENS[1], self)]
@@ -218,7 +226,7 @@ class Model(object):
 
                 x_next = game.extract_features(players[player_num].player)
                 V_next = self.get_output(x_next)
-                self.sess.run(self.train_op, feed_dict={ self.x: x, self.V_next: V_next })
+                self.sess.run(self.train_op, feed_dict={self.x: x, self.V_next: V_next})
 
                 x = x_next
                 game_step += 1
@@ -230,11 +238,13 @@ class Model(object):
                 self.global_step,
                 self.summaries_op,
                 self.reset_op
-            ], feed_dict={ self.x: x, self.V_next: np.array([[winner]], dtype='float') })
+            ], feed_dict={self.x: x, self.V_next: np.array([[winner]], dtype='float')})
             summary_writer.add_summary(summaries, global_step=global_step)
 
-            print("Game %d/%d (Winner: %s) in %d turns" % (episode, episodes, players[winner].player, game_step))
-            self.saver.save(self.sess, self.checkpoint_path + 'checkpoint', global_step=global_step)
+            print("Game %d/%d (Winner: %s) in %d turns" % (episode, episodes,
+                                                           players[winner].player, game_step))
+            self.saver.save(self.sess, self.checkpoint_path + 'checkpoint',
+                            global_step=global_step)
 
         summary_writer.close()
 
