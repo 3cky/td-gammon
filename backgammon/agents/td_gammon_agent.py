@@ -1,26 +1,28 @@
+import numpy as np
+
+
 class TDAgent(object):
 
-    def __init__(self, player, model):
+    def __init__(self, player, model, name='TD-Gammon'):
         self.player = player
         self.model = model
-        self.name = 'TD-Gammon'
+        self.name = name
 
     def get_action(self, actions, game):
         """
         Return best action according to self.evaluationFunction,
         with no lookahead.
         """
-        v_best = 0
-        a_best = None
+        actions = list(actions)
+
+        features = []
 
         for a in actions:
             ateList = game.take_action(a, self.player)
-            features = game.extract_features(game.opponent(self.player))
-            v = self.model.get_output(features)
-            v = 1. - v if self.player == game.players[0] else v
-            if v > v_best:
-                v_best = v
-                a_best = a
+            features.extend(game.extract_features(game.opponent(self.player)))
             game.undo_action(a, self.player, ateList)
 
-        return a_best
+        v = self.model.get_output(features)
+        v = 1. - v if self.player == game.players[0] else v
+
+        return actions[np.argmax(v)]

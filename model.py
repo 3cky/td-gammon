@@ -52,7 +52,7 @@ class Model(object):
         layer_size_output = 1
 
         # placeholders for input and target output
-        self.x = tf.placeholder('float', [1, layer_size_input], name='x')
+        self.x = tf.placeholder('float', [None, layer_size_input], name='x')
         self.V_next = tf.placeholder('float', [1, layer_size_output], name='V_next')
 
         # build network arch. (just 2 layers with sigmoid activation)
