@@ -192,8 +192,8 @@ class Model(object):
             winners[winner] += 1
 
             winners_total = sum(winners)
-            print("[Episode %d] %s (%s) vs %s (%s) %d:%d of %d games (%.2f%%)" %
-                  (episode,
+            print("[Episode %d] Steps: %d, %s (%s) vs %s (%s) %d:%d of %d games (%.2f%%)" %
+                  (episode, game.num_steps,
                    players[0].name, players[0].player,
                    players[1].name, players[1].player,
                    winners[0], winners[1], winners_total,
@@ -219,7 +219,6 @@ class Model(object):
 
             x = game.extract_features(players[player_num].player)
 
-            game_step = 0
             while not game.is_over():
                 game.next_step(players[player_num], player_num)
                 player_num = (player_num + 1) % 2
@@ -229,7 +228,6 @@ class Model(object):
                 self.sess.run(self.train_op, feed_dict={self.x: x, self.V_next: V_next})
 
                 x = x_next
-                game_step += 1
 
             winner = game.winner()
 
@@ -242,7 +240,7 @@ class Model(object):
             summary_writer.add_summary(summaries, global_step=global_step)
 
             print("Game %d/%d (Winner: %s) in %d turns" % (episode, episodes,
-                                                           players[winner].player, game_step))
+                                                           players[winner].player, game.num_steps))
             self.saver.save(self.sess, self.checkpoint_path + 'checkpoint',
                             global_step=global_step)
 

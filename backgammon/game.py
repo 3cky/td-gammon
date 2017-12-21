@@ -73,6 +73,8 @@ class Game:
         return self.winner()
 
     def next_step(self, player, player_num, draw=False):
+        self.num_steps += 1
+
         roll = self.roll_dice()
 
         if draw:
