@@ -2,7 +2,6 @@ import os
 import copy
 import time
 import random
-import numpy as np
 
 
 class Game:
@@ -44,23 +43,6 @@ class Game:
         game = Game()
         game.reset()
         return game
-
-    def extract_features(self, player):
-        features = []
-        for p in self.players:
-            for col in self.grid:
-                feats = [0.] * 6
-                if len(col) > 0 and col[0] == p:
-                    for i in range(len(col)):
-                        feats[min(i, 5)] += 1
-                features += feats
-            features.append(float(len(self.bar_pieces[p])) / 2.)
-            features.append(float(len(self.off_pieces[p])) / self.num_pieces[p])
-        if player == self.players[0]:
-            features += [1., 0.]
-        else:
-            features += [0., 1.]
-        return np.array(features).reshape(1, -1)
 
     def roll_dice(self):
         return (random.randint(1, self.die), random.randint(1, self.die))

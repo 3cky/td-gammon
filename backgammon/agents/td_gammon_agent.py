@@ -19,7 +19,7 @@ class TDAgent(object):
 
         for a in actions:
             ateList = game.take_action(a, self.player)
-            features.extend(game.extract_features(game.opponent(self.player)))
+            features.extend(self.model.extract_features(game, game.opponent(self.player)))
             game.undo_action(a, self.player, ateList)
 
         v = self.model.get_output(features)

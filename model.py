@@ -175,6 +175,23 @@ class Model(object):
             print('Restoring checkpoint: {0}'.format(latest_checkpoint_path))
             self.saver.restore(self.sess, latest_checkpoint_path)
 
+    def extract_features(self, game, player):
+        features = []
+        for p in game.players:
+            for col in game.grid:
+                feats = [0.] * 6
+                if len(col) > 0 and col[0] == p:
+                    for i in range(len(col)):
+                        feats[min(i, 5)] += 1
+                features += feats
+            features.append(float(len(game.bar_pieces[p])) / 2.)
+            features.append(float(len(game.off_pieces[p])) / game.num_pieces[p])
+        if player == game.players[0]:
+            features += [1., 0.]
+        else:
+            features += [0., 1.]
+        return np.array(features).reshape(1, -1)
+
     def get_output(self, x):
         return self.sess.run(self.V, feed_dict={self.x: x})
 
@@ -217,13 +234,13 @@ class Model(object):
             game = Game.new()
             player_num = random.randint(0, 1)
 
-            x = game.extract_features(players[player_num].player)
+            x = self.extract_features(game, players[player_num].player)
 
             while not game.is_over():
                 game.next_step(players[player_num], player_num)
                 player_num = (player_num + 1) % 2
 
-                x_next = game.extract_features(players[player_num].player)
+                x_next = self.extract_features(game, players[player_num].player)
                 V_next = self.get_output(x_next)
                 self.sess.run(self.train_op, feed_dict={self.x: x, self.V_next: V_next})
 
