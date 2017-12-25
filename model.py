@@ -5,10 +5,10 @@ import random
 import numpy as np
 import tensorflow as tf
 
-from backgammon.game import Game
-from backgammon.agents.human_agent import HumanAgent
-from backgammon.agents.random_agent import RandomAgent
-from backgammon.agents.td_gammon_agent import TDAgent
+from gammon.game import Game
+from gammon.agents.human_agent import HumanAgent
+from gammon.agents.random_agent import RandomAgent
+from gammon.agents.td_gammon_agent import TDAgent
 
 
 # helper to initialize a weight and bias variable
