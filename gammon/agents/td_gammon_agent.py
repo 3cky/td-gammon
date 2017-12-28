@@ -8,7 +8,7 @@ class TDAgent(object):
         self.model = model
         self.name = name
 
-    def get_action(self, actions, game):
+    def choose_action(self, actions, game):
         """
         Return best action according to self.evaluationFunction,
         with no lookahead.
@@ -18,9 +18,9 @@ class TDAgent(object):
         features = []
 
         for a in actions:
-            ateList = game.take_action(a, self.player)
+            game.take_action(a, self.player)
             features.extend(self.model.extract_features(game, game.opponent(self.player)))
-            game.undo_action(a, self.player, ateList)
+            game.undo_action(a, self.player)
 
         v = self.model.get_output(features)
         v = 1. - v if self.player == game.players[0] else v

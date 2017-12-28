@@ -7,5 +7,5 @@ class RandomAgent(object):
         self.player = player
         self.name = 'Random'
 
-    def get_action(self, moves, game=None):
+    def choose_action(self, moves, game=None):
         return random.choice(list(moves)) if moves else None

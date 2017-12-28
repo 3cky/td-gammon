@@ -6,55 +6,34 @@ class HumanAgent(object):
         self.player = player
         self.name = 'Human'
 
-    def get_action(self, moves, game=None):
+    def choose_action(self, moves, game=None):
         if not moves:
             input("No moves for you...(hit enter)")
             return None
 
-        while True:
-            while True:
-                mv1 = input('Please enter a move "<location start>,<location end>'
-                            '("%s" for on the board, "%s" for off the board): ' %
-                            (Game.ON, Game.OFF))
-                mv1 = self.get_formatted_move(mv1)
-                if not mv1:
-                    print('Bad format enter e.g. "3,4"')
+        moves = list(moves)
+
+        choice_index = -1
+        while choice_index < 0 or choice_index > len(moves):
+            print('\nChoose move for \'%s\' (%d-%d):\n' %
+                  (self.player, 1, len(moves)))
+            for i, move in enumerate(moves):
+                m = []
+                for s, e in move:
+                    s += 1
+                    if e != Game.OFF:
+                        e += 1
+                    m.append((s, e))
+#                 action_name = " ".join([str(self.hand[self.hand.find(suit, value)])
+#                                              for s, e in move])
+                print('%d) %s' % (i+1, m))
+            try:
+                choice = input('Choose move (1): ')
+                if not choice:
+                    choice_index = 0
                 else:
-                    break
+                    choice_index = int(choice)-1
+            except ValueError:
+                pass
 
-            while True:
-                mv2 = input('Please enter a second move (enter to skip): ')
-                if mv2 == '':
-                    mv2 = None
-                    break
-                mv2 = self.get_formatted_move(mv2)
-                if not mv2:
-                    print('Bad format enter e.g. "3,4"')
-                else:
-                    break
-
-            if mv2:
-                move = (mv1, mv2)
-            else:
-                move = (mv1,)
-
-            if move in moves:
-                return move
-            elif move[::-1] in moves:
-                move = move[::-1]
-                return move
-            else:
-                print("You can't play that move")
-
-        return None
-
-    def get_formatted_move(self, move):
-        try:
-            start, end = move.split(",")
-            if start == Game.ON:
-                return (start, int(end))
-            if end == Game.OFF:
-                return (int(start), end)
-            return (int(start), int(end))
-        except:
-            return False
+        return moves[choice_index]

@@ -184,7 +184,7 @@ class Model(object):
                     for i in range(len(col)):
                         feats[min(i, 5)] += 1
                 features += feats
-            features.append(float(len(game.bar_pieces[p])) / 2.)
+            features.append(0.)  # FIXME bar
             features.append(float(len(game.off_pieces[p])) / game.num_pieces[p])
         if player == game.players[0]:
             features += [1., 0.]
@@ -197,7 +197,7 @@ class Model(object):
 
     def play(self):
         game = Game.new()
-        game.play([TDAgent(Game.TOKENS[0], self), HumanAgent(Game.TOKENS[1])], draw=True)
+        game.play([RandomAgent(Game.TOKENS[0]), RandomAgent(Game.TOKENS[1])], draw=True)
 
     def test(self, episodes=100, draw=False):
         players = [TDAgent(Game.TOKENS[0], self), RandomAgent(Game.TOKENS[1])]
