@@ -200,7 +200,7 @@ class Model(object):
         game.play([RandomAgent(Game.TOKENS[0]), RandomAgent(Game.TOKENS[1])], draw=True)
 
     def test(self, episodes=100, draw=False):
-        players = [TDAgent(Game.TOKENS[0], self), RandomAgent(Game.TOKENS[1])]
+        players = [RandomAgent(Game.TOKENS[0]), RandomAgent(Game.TOKENS[1])]
         winners = [0, 0]
         for episode in range(episodes):
             game = Game.new()

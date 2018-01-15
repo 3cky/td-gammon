@@ -29,7 +29,7 @@ if __name__ == '__main__':
     with sess.as_default(), graph.as_default():
         model = Model(sess, model_path, summary_path, checkpoint_path, restore=FLAGS.restore)
         if FLAGS.test:
-            model.test(episodes=200)
+            model.test(episodes=2000)
         elif FLAGS.play:
             model.play()
         else:

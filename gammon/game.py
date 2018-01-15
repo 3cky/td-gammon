@@ -150,7 +150,7 @@ class Game:
 
         return moves
 
-    def find_moves(self, rs, player, move, moves, states, max_from_head=1, from_head=0):
+    def find_moves(self, rs, player, move, moves, states, max_from_head=1):
         if len(rs) == 0:
             # check for duplicate end state
             state = tuple([tuple(s) for s in self.grid])
@@ -162,7 +162,7 @@ class Game:
         r, rs = rs[0], rs[1:]
 
         start = head = len(self.grid)-1
-        if from_head >= max_from_head:
+        if max_from_head <= 0:
             start -= 1
 
         # check all board positions starting from head
@@ -178,7 +178,7 @@ class Game:
                 piece = self.grid[s].pop()
                 self.grid[e].append(piece)
                 self.find_moves(rs, player, move+((s, e), ), moves, states,
-                                max_from_head, from_head+1 if h else from_head)
+                                max_from_head-1 if h else max_from_head)
                 self.grid[e].pop()
                 self.grid[s].append(piece)
 
@@ -187,7 +187,7 @@ class Game:
                 piece = self.grid[s].pop()
                 self.off_pieces[player].append(piece)
                 self.find_moves(rs, player, move+((s, Game.OFF), ), moves, states,
-                                max_from_head, from_head+1 if h else from_head)
+                                max_from_head-1 if h else max_from_head)
                 self.off_pieces[player].pop()
                 self.grid[s].append(piece)
 
@@ -268,7 +268,7 @@ class Game:
     def can_offboard(self, player):
         count = 0
         for i in range(self.die):
-            if len(self.grid[i]) > 0 and self.grid[i][0] == player:
+            if self.grid[i] and self.grid[i][0] == player:
                 count += len(self.grid[i])
         if count+len(self.off_pieces[player]) == self.num_pieces[player]:
             return True
@@ -282,22 +282,22 @@ class Game:
         """
         if start > self.die-1:
             return False
-        if len(self.grid[start]) == 0 or self.grid[start][0] != player:
+        if not self.grid[start] or self.grid[start][0] != player:
             return False
         if start-r == -1:
             return True
         if start-r < -1:
             for i in range(start+1, self.die):
-                if len(self.grid[i]) != 0 and self.grid[i][0] == self.players[0]:
+                if self.grid[i] and self.grid[i][0] == self.players[0]:
                     return False
             return True
         return False
 
-    def is_valid_move(self, start, end, token):
-        if len(self.grid[start]) > 0 and self.grid[start][0] == token:
+    def is_valid_move(self, start, end, player):
+        if self.grid[start] and self.grid[start][0] == player:
             if end < 0 or end >= len(self.grid):
                 return False
-            if len(self.grid[end]) == 0 or self.grid[end][0] == token:
+            if not self.grid[end] or self.grid[end][0] == player:
                 return True
         return False
 
