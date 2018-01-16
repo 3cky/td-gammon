@@ -197,22 +197,22 @@ class Model(object):
 
     def play(self):
         game = Game.new()
-        game.play([RandomAgent(Game.TOKENS[0]), RandomAgent(Game.TOKENS[1])], draw=True)
+        game.play([RandomAgent(Game.PLAYERS[0]), RandomAgent(Game.PLAYERS[1])], draw=True)
 
     def test(self, episodes=100, draw=False):
-        players = [RandomAgent(Game.TOKENS[0]), RandomAgent(Game.TOKENS[1])]
+        player_agents = [RandomAgent(Game.PLAYERS[0]), RandomAgent(Game.PLAYERS[1])]
         winners = [0, 0]
         for episode in range(episodes):
             game = Game.new()
 
-            winner = game.play(players, draw=draw)
+            winner = game.play(player_agents, draw=draw)
             winners[winner] += 1
 
             winners_total = sum(winners)
             print("[Episode %d] Steps: %d, %s (%s) vs %s (%s) %d:%d of %d games (%.2f%%)" %
                   (episode, game.num_steps,
-                   players[0].name, players[0].player,
-                   players[1].name, players[1].player,
+                   player_agents[0].name, player_agents[0].player,
+                   player_agents[1].name, player_agents[1].player,
                    winners[0], winners[1], winners_total,
                    (winners[0] / winners_total) * 100.0))
 
@@ -222,7 +222,7 @@ class Model(object):
                                                                self.sess.graph_def))
 
         # the agent plays against itself, making the best move for each player
-        players = [TDAgent(Game.TOKENS[0], self), TDAgent(Game.TOKENS[1], self)]
+        players = [TDAgent(Game.PLAYERS[0], self), TDAgent(Game.PLAYERS[1], self)]
 
         validation_interval = 1000
         episodes = 5000

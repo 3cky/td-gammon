@@ -11,7 +11,7 @@ class Game:
     NUM_PIECES = 15
     QUAD = 6
     OFF = 'off'
-    TOKENS = ['x', 'o']
+    PLAYERS = ['x', 'o']
 
     def __init__(self, layout=LAYOUT, grid=None, off_pieces=None,
                  num_pieces=None, players=None):
@@ -27,7 +27,7 @@ class Game:
             self.num_pieces = copy.deepcopy(num_pieces)
             self.players = players
             return
-        self.players = Game.TOKENS
+        self.players = Game.PLAYERS
         self.grid = [[] for _ in range(Game.NUM_POSITIONS)]
         self.off_pieces = {}
         self.num_pieces = {}
@@ -44,16 +44,18 @@ class Game:
     def roll_dice(self):
         return (random.randint(1, self.die), random.randint(1, self.die))
 
-    def play(self, players, draw=False):
-        player_num = random.randint(0, 1)
+    def play(self, player_agents, draw=False):
+        assert len(player_agents) == 2
+        assert player_agents[0].player == self.players[0]
+        player_index = random.randint(0, 1)
         while not self.is_over():
-            self.next_step(players[player_num], player_num, draw=draw)
-            player_num = (player_num + 1) % 2
+            self.next_step(player_agents[player_index], draw=draw)
+            player_index = (player_index+1) % 2
         if draw:
             print("\nGame is over, winner: '%s'" % self.players[self.winner()])
         return self.winner()
 
-    def next_step(self, player, player_num, draw=False):
+    def next_step(self, player_agent, draw=False):
         self.num_steps += 1
 
         roll = self.roll_dice()
@@ -61,30 +63,30 @@ class Game:
         if draw:
             self.draw()
 
-        self.take_turn(player, roll, draw=draw)
+        self.take_turn(player_agent, roll, draw=draw)
 
-    def take_turn(self, player, roll, draw=False):
+    def take_turn(self, player_agent, roll, draw=False):
         if draw:
-            print("'%s' rolled <%d, %d>" % (player.player, roll[0], roll[1]))
+            print("'%s' rolled <%d, %d>" % (player_agent.player, roll[0], roll[1]))
             time.sleep(1)
 
-        if player.player == 'o':
+        if player_agent.player == self.PLAYERS[1]:
             self.flip_board()
 
-        moves = self.get_actions(roll, player.player)
+        moves = self.get_actions(roll, player_agent.player)
 
-        if player.player == 'o':
+        if player_agent.player == self.PLAYERS[1]:
             self.flip_board()
             moves = self.flip_moves(moves)
 
         if draw:
-            print("'%s' moves available: %d>" % (player.player, len(moves)))
+            print("'%s' moves available: %d>" % (player_agent.player, len(moves)))
             time.sleep(1)
 
-        move = player.choose_action(moves, self) if moves else None
+        move = player_agent.choose_action(moves, self) if moves else None
 
         if move:
-            self.take_action(move, player.player)
+            self.take_action(move, player_agent.player)
 
     def clone(self):
         """
@@ -93,24 +95,24 @@ class Game:
         """
         return Game(None, self.grid, self.off_pieces, self.num_pieces, self.players)
 
-    def take_action(self, action, token):
+    def take_action(self, action, player):
         """
         Makes given move for player, assumes move is valid
         """
         for s, e in action:
             piece = self.grid[s].pop()
             if e == Game.OFF:
-                self.off_pieces[token].append(piece)
+                self.off_pieces[player].append(piece)
             else:
                 self.grid[e].append(piece)
 
-    def undo_action(self, action, token):
+    def undo_action(self, action, player):
         """
         Reverses given move for player, assumes move is valid
         """
         for s, e in reversed(action):
             if e == Game.OFF:
-                piece = self.off_pieces[token].pop()
+                piece = self.off_pieces[player].pop()
             else:
                 piece = self.grid[e].pop()
             self.grid[s].append(piece)
@@ -191,12 +193,12 @@ class Game:
                 self.off_pieces[player].pop()
                 self.grid[s].append(piece)
 
-    def opponent(self, token):
+    def opponent(self, player):
         """
-        Retrieve opponent players token for a given players token.
+        Retrieve opponent player for a given player.
         """
         for t in self.players:
-            if t != token:
+            if t != player:
                 return t
 
     def is_won(self, player):
@@ -243,8 +245,8 @@ class Game:
         Resets game to original layout.
         """
         for col in self.layout.split(','):
-            loc, num, token = col.split('-')
-            self.grid[int(loc)] = [token for _ in range(int(num))]
+            loc, num, player = col.split('-')
+            self.grid[int(loc)] = [player for _ in range(int(num))]
         for col in self.grid:
             for piece in col:
                 self.num_pieces[piece] += 1
@@ -280,15 +282,19 @@ class Game:
         In this function we assume we are cool to offboard,
         i.e. all pieces are in the home quadrant.
         """
+        # Can't remove piece from non-home position
         if start > self.die-1:
             return False
+        # Can't remove piece from empty or opponent-occupied position
         if not self.grid[start] or self.grid[start][0] != player:
             return False
+        # Can remove piece from position with exact roll value
         if start-r == -1:
             return True
+        # Can remove piece from position if previous positions in home are empty
         if start-r < -1:
             for i in range(start+1, self.die):
-                if self.grid[i] and self.grid[i][0] == self.players[0]:
+                if self.grid[i] and self.grid[i][0] == player:
                     return False
             return True
         return False
