@@ -11,6 +11,7 @@ class Game:
     NUM_PIECES = 15
     QUAD = 6
     OFF = 'off'
+    BLOCK_LENGTH = 6
     PLAYERS = ['x', 'o']
 
     def __init__(self, layout=LAYOUT, grid=None, off_pieces=None,
@@ -125,34 +126,38 @@ class Game:
 
         states = set()
 
+        opp_minpos = self.opponent_min_position(player)
+        assert opp_minpos is not None
+
         r1, r2 = roll
 
         if r1 == r2:  # doubles
             # first check for full move
-            self.find_moves(tuple([r1]*4), player, (), moves, states)
+            self.find_moves(tuple([r1]*4), player, opp_minpos, (), moves, states)
             # has no moves, allow to move two pieces from head on first turn
             if not moves and len(self.grid[-1]) == Game.NUM_PIECES:
-                self.find_moves(tuple([r1]*4), player, (), moves, states, max_from_head=2)
+                self.find_moves(tuple([r1]*4), player, opp_minpos,
+                                (), moves, states, max_from_head=2)
             # keep trying until we find some moves
             i = 3
             while not moves and i > 0:
-                self.find_moves(tuple([r1]*i), player, (), moves, states)
+                self.find_moves(tuple([r1]*i), player, opp_minpos, (), moves, states)
                 i -= 1
         else:
             # first check for full moves
-            self.find_moves((r1, r2), player, (), moves, states)
-            self.find_moves((r2, r1), player, (), moves, states)
+            self.find_moves((r1, r2), player, opp_minpos, (), moves, states)
+            self.find_moves((r2, r1), player, opp_minpos, (), moves, states)
             # has no moves, try moving only one piece
             if not moves:
                 roll = sorted(roll, reverse=True)  # first check max roll value
                 for r in roll:
-                    self.find_moves((r, ), player, (), moves, states)
+                    self.find_moves((r, ), player, opp_minpos, (), moves, states)
                     if moves:
                         break
 
         return moves
 
-    def find_moves(self, rs, player, move, moves, states, max_from_head=1):
+    def find_moves(self, rs, player, opp_minpos, move, moves, states, max_from_head=1):
         if len(rs) == 0:
             # check for duplicate end state
             state = tuple([tuple(s) for s in self.grid])
@@ -176,10 +181,10 @@ class Game:
             h = (s == head)
 
             # check for on-board moves
-            if self.is_valid_move(s, e, player):
+            if self.is_valid_move(s, e, player, opp_minpos):
                 piece = self.grid[s].pop()
                 self.grid[e].append(piece)
-                self.find_moves(rs, player, move+((s, e), ), moves, states,
+                self.find_moves(rs, player, opp_minpos, move+((s, e), ), moves, states,
                                 max_from_head-1 if h else max_from_head)
                 self.grid[e].pop()
                 self.grid[s].append(piece)
@@ -188,7 +193,7 @@ class Game:
             if self.can_offboard(player) and self.can_remove_piece(player, s, r):
                 piece = self.grid[s].pop()
                 self.off_pieces[player].append(piece)
-                self.find_moves(rs, player, move+((s, Game.OFF), ), moves, states,
+                self.find_moves(rs, player, opp_minpos, move+((s, Game.OFF), ), moves, states,
                                 max_from_head-1 if h else max_from_head)
                 self.off_pieces[player].pop()
                 self.grid[s].append(piece)
@@ -212,6 +217,21 @@ class Game:
         If game is over and player lost, return True, else return False
         """
         return self.is_over() and player != self.players[self.winner()]
+
+    def opponent_min_position(self, player):
+        """
+        Get player opponent min position (in its coordinate system, so 0 is home, 23 is head),
+        or None if no opponent was found
+        """
+        for p in range(Game.NUM_POSITIONS):
+            op = self.flip_position(p)
+            if self.grid[op] and self.grid[op][0] != player:
+                return p
+        return None
+
+    @staticmethod
+    def flip_position(pos):
+        return (pos+Game.NUM_POSITIONS//2) % Game.NUM_POSITIONS
 
     def flip_board(self):
         """
@@ -270,7 +290,7 @@ class Game:
     def can_offboard(self, player):
         count = 0
         for i in range(self.die):
-            if self.grid[i] and self.grid[i][0] == player:
+            if self.can_pick_piece(player, i):
                 count += len(self.grid[i])
         if count+len(self.off_pieces[player]) == self.num_pieces[player]:
             return True
@@ -282,30 +302,49 @@ class Game:
         In this function we assume we are cool to offboard,
         i.e. all pieces are in the home quadrant.
         """
+        assert start >= 0 and start < len(self.grid), "start: %s" % start
         # Can't remove piece from non-home position
         if start > self.die-1:
             return False
         # Can't remove piece from empty or opponent-occupied position
-        if not self.grid[start] or self.grid[start][0] != player:
+        if not self.can_pick_piece(player, start):
             return False
         # Can remove piece from position with exact roll value
         if start-r == -1:
             return True
-        # Can remove piece from position if previous positions in home are empty
+        # Can remove piece from position only if previous positions in home are empty
         if start-r < -1:
             for i in range(start+1, self.die):
-                if self.grid[i] and self.grid[i][0] == player:
+                if self.can_pick_piece(player, i):
                     return False
             return True
         return False
 
-    def is_valid_move(self, start, end, player):
-        if self.grid[start] and self.grid[start][0] == player:
-            if end < 0 or end >= len(self.grid):
-                return False
-            if not self.grid[end] or self.grid[end][0] == player:
-                return True
-        return False
+    def is_valid_move(self, start, end, player, opp_minpos):
+        assert start >= 0 and start < len(self.grid), "start: %s" % start
+        return self.can_pick_piece(player, start) and self.can_place_piece(player, end, opp_minpos)
+
+    def can_pick_piece(self, player, pos):
+        return self.grid[pos] and self.grid[pos][0] == player
+
+    def can_place_piece(self, player, pos, opp_minpos):
+        if pos < 0 or pos >= len(self.grid):
+            return False
+        if self.grid[pos] and self.grid[pos][0] != player:
+            return False
+        # Check for block ahead of opponent pieces
+        if opp_minpos < self.BLOCK_LENGTH or self.flip_position(pos) > opp_minpos:
+            return True
+        w = 0
+        for p in range(opp_minpos):
+            fp = self.flip_position(p)
+            if fp == pos or self.can_pick_piece(player, fp):
+                w += 1
+                if w >= self.BLOCK_LENGTH:
+                    return False
+            else:
+                w = 0
+        return True
 
     def draw_col(self, i, col):
         print("|", end=" ")
