@@ -9,6 +9,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_boolean('test', False, 'If true, test against a random strategy.')
 flags.DEFINE_boolean('play', False, 'If true, play against a trained TD-Gammon strategy.')
 flags.DEFINE_boolean('restore', False, 'If true, restore a checkpoint before training.')
+flags.DEFINE_integer('episodes', 1000, 'Number of episodes to train/test.')
 
 model_path = os.environ.get('MODEL_PATH', 'models/')
 summary_path = os.environ.get('SUMMARY_PATH', 'summaries/')
@@ -29,8 +30,8 @@ if __name__ == '__main__':
     with sess.as_default(), graph.as_default():
         model = Model(sess, model_path, summary_path, checkpoint_path, restore=FLAGS.restore)
         if FLAGS.test:
-            model.test(episodes=2000)
+            model.test(episodes=FLAGS.episodes)
         elif FLAGS.play:
             model.play()
         else:
-            model.train()
+            model.train(episodes=FLAGS.episodes)

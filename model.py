@@ -179,13 +179,13 @@ class Model(object):
         features = []
         for p in game.players:
             for col in game.grid:
-                feats = [0.] * 6
+                feats = [0.]*6
                 if len(col) > 0 and col[0] == p:
                     for i in range(len(col)):
                         feats[min(i, 5)] += 1
                 features += feats
             features.append(0.)  # FIXME bar
-            features.append(float(len(game.off_pieces[p])) / game.num_pieces[p])
+            features.append(float(len(game.off_pieces[p]))/game.num_pieces[p])
         if player == game.players[0]:
             features += [1., 0.]
         else:
@@ -197,12 +197,12 @@ class Model(object):
 
     def play(self):
         game = Game.new()
-        game.play([RandomAgent(Game.PLAYERS[0]), RandomAgent(Game.PLAYERS[1])], draw=True)
+        game.play([HumanAgent(Game.PLAYERS[0]), TDAgent(Game.PLAYERS[1], self)], draw=True)
 
     def test(self, episodes=100, draw=False):
-        player_agents = [RandomAgent(Game.PLAYERS[0]), RandomAgent(Game.PLAYERS[1])]
+        player_agents = [TDAgent(Game.PLAYERS[0], self), RandomAgent(Game.PLAYERS[1])]
         winners = [0, 0]
-        for episode in range(episodes):
+        for episode in range(1, episodes+1):
             game = Game.new()
 
             winner = game.play(player_agents, draw=draw)
@@ -214,33 +214,30 @@ class Model(object):
                    player_agents[0].name, player_agents[0].player,
                    player_agents[1].name, player_agents[1].player,
                    winners[0], winners[1], winners_total,
-                   (winners[0] / winners_total) * 100.0))
+                   (winners[0]/winners_total)*100.0))
 
-    def train(self):
+    def train(self, episodes=5000, test_interval=1000, test_episodes=100,
+              checkpoint_interval=1000, summary_interval=100):
+        print("Training started.\n")
+
         tf.train.write_graph(self.sess.graph_def, self.model_path, 'td_gammon.pb', as_text=False)
         summary_writer = tf.summary.FileWriter('{0}{1}'.format(self.summary_path, int(time.time()),
                                                                self.sess.graph_def))
 
         # the agent plays against itself, making the best move for each player
-        players = [TDAgent(Game.PLAYERS[0], self), TDAgent(Game.PLAYERS[1], self)]
+        player_agents = [TDAgent(Game.PLAYERS[0], self), TDAgent(Game.PLAYERS[1], self)]
 
-        validation_interval = 1000
-        episodes = 5000
-
-        for episode in range(episodes):
-            if episode != 0 and episode % validation_interval == 0:
-                self.test(episodes=100)
-
+        for episode in range(1, episodes+1):
             game = Game.new()
-            player_num = random.randint(0, 1)
+            player_index = random.randint(0, 1)
 
-            x = self.extract_features(game, players[player_num].player)
+            x = self.extract_features(game, player_agents[player_index].player)
 
             while not game.is_over():
-                game.next_step(players[player_num], player_num)
-                player_num = (player_num + 1) % 2
+                game.next_step(player_agents[player_index])
+                player_index = (player_index+1) % 2
 
-                x_next = self.extract_features(game, players[player_num].player)
+                x_next = self.extract_features(game, player_agents[player_index].player)
                 V_next = self.get_output(x_next)
                 self.sess.run(self.train_op, feed_dict={self.x: x, self.V_next: V_next})
 
@@ -248,19 +245,31 @@ class Model(object):
 
             winner = game.winner()
 
-            _, global_step, summaries, _ = self.sess.run([
+            print("[%d/%d] (winner: '%s') in %d turns" % (episode, episodes,
+                                                          player_agents[winner].player,
+                                                          game.num_steps))
+
+            _, global_step, _ = self.sess.run([
                 self.train_op,
                 self.global_step,
-                self.summaries_op,
                 self.reset_op
             ], feed_dict={self.x: x, self.V_next: np.array([[winner]], dtype='float')})
-            summary_writer.add_summary(summaries, global_step=global_step)
 
-            print("Game %d/%d (Winner: %s) in %d turns" % (episode, episodes,
-                                                           players[winner].player, game.num_steps))
-            self.saver.save(self.sess, self.checkpoint_path + 'checkpoint',
-                            global_step=global_step)
+            # write summary every summary_interval
+            if episode % summary_interval == 0 or episode == episodes:
+                summaries = self.sess.run(
+                    self.summaries_op,
+                    feed_dict={self.x: x, self.V_next: np.array([[winner]], dtype='float')}
+                )
+                summary_writer.add_summary(summaries, global_step=global_step)
+            # save checkpoint every checkpoint_interval
+            if episode % checkpoint_interval == 0 or episode == episodes:
+                self.saver.save(self.sess, self.checkpoint_path+'checkpoint',
+                                global_step=global_step)
+            # play test games every test_interval
+            if episode % test_interval == 0 or episode == episodes:
+                self.test(episodes=test_episodes)
 
         summary_writer.close()
 
-        self.test(episodes=1000)
+        print("\nTraining completed.")
