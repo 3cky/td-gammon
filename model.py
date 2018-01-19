@@ -199,22 +199,33 @@ class Model(object):
         game = Game.new()
         game.play([HumanAgent(Game.PLAYERS[0]), TDAgent(Game.PLAYERS[1], self)], draw=True)
 
-    def test(self, episodes=100, draw=False):
+    def test(self, episodes=100, draw=False, full_stats=True):
         player_agents = [TDAgent(Game.PLAYERS[0], self), RandomAgent(Game.PLAYERS[1])]
+        num_steps = 0
         winners = [0, 0]
         for episode in range(1, episodes+1):
             game = Game.new()
 
             winner = game.play(player_agents, draw=draw)
             winners[winner] += 1
+            num_steps += game.num_steps
 
             winners_total = sum(winners)
-            print("[Episode %d] Steps: %d, %s (%s) vs %s (%s) %d:%d of %d games (%.2f%%)" %
-                  (episode, game.num_steps,
-                   player_agents[0].name, player_agents[0].player,
-                   player_agents[1].name, player_agents[1].player,
-                   winners[0], winners[1], winners_total,
-                   (winners[0]/winners_total)*100.0))
+
+            if full_stats:
+                print("[Test %d/%d] %s (%s) vs %s (%s), steps: %d, wins: %d:%d (%.1f%%)" %
+                      (episode, episodes,
+                       player_agents[0].name, player_agents[0].player,
+                       player_agents[1].name, player_agents[1].player,
+                       game.num_steps, winners[0], winners[1],
+                       (winners[0]/winners_total)*100.0))
+
+        print("\nPlayed %d test games %s (%s) vs %s (%s), mean steps: %.1f, "
+              "wins: %d/%d, win ratio: %.1f%%" %
+              (winners_total, player_agents[0].name, player_agents[0].player,
+               player_agents[1].name, player_agents[1].player,
+               num_steps/winners_total, winners[0], winners[1],
+               (winners[0]/winners_total)*100.0))
 
     def train(self, episodes=5000, test_interval=1000, test_episodes=100,
               checkpoint_interval=1000, summary_interval=100):
@@ -245,9 +256,9 @@ class Model(object):
 
             winner = game.winner()
 
-            print("[%d/%d] (winner: '%s') in %d turns" % (episode, episodes,
-                                                          player_agents[winner].player,
-                                                          game.num_steps))
+            print("[Train %d/%d] (winner: '%s') in %d turns" % (episode, episodes,
+                                                                player_agents[winner].player,
+                                                                game.num_steps))
 
             _, global_step, _ = self.sess.run([
                 self.train_op,
@@ -268,7 +279,7 @@ class Model(object):
                                 global_step=global_step)
             # play test games every test_interval
             if episode % test_interval == 0 or episode == episodes:
-                self.test(episodes=test_episodes)
+                self.test(episodes=test_episodes, full_stats=False)
 
         summary_writer.close()
 

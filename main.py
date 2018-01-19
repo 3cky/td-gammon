@@ -8,7 +8,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean('test', False, 'If true, test against a random strategy.')
 flags.DEFINE_boolean('play', False, 'If true, play against a trained TD-Gammon strategy.')
-flags.DEFINE_boolean('restore', False, 'If true, restore a checkpoint before training.')
+flags.DEFINE_boolean('restore', True, 'If true, restore a checkpoint before training.')
 flags.DEFINE_integer('episodes', 1000, 'Number of episodes to train/test.')
 
 model_path = os.environ.get('MODEL_PATH', 'models/')
