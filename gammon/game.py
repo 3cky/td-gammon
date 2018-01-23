@@ -288,12 +288,15 @@ class Game:
         return False
 
     def can_offboard(self, player):
+        if self.off_pieces[player]:
+            return True
         count = 0
+        num_pieces = self.num_pieces[player]
         for i in range(self.die):
             if self.can_pick_piece(player, i):
                 count += len(self.grid[i])
-        if count+len(self.off_pieces[player]) == self.num_pieces[player]:
-            return True
+                if count == num_pieces:
+                    return True
         return False
 
     def can_remove_piece(self, player, start, r):
