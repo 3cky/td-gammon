@@ -6,13 +6,13 @@ import random
 
 class Game:
 
-    LAYOUT = "11-15-o,23-15-x"
+    LAYOUT = "11-15-x,23-15-o"
     NUM_POSITIONS = 24
     NUM_PIECES = 15
     QUAD = 6
     OFF = 'off'
     BLOCK_LENGTH = 6
-    PLAYERS = ['x', 'o']
+    PLAYERS = ['o', 'x']
 
     def __init__(self, layout=LAYOUT, grid=None, off_pieces=None,
                  num_pieces=None, players=None):
