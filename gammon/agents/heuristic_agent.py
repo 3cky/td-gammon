@@ -36,22 +36,27 @@ class HeuristicAgent(object):
     W_CLOSED_I = 2  # indexes [23-18]
     W_CLOSED_I_3 = 4  # [23-18] when closed more 3 checkers
     W_CLOSED_II = 3  # indexes [17-12]
-    W_CLOSED_II_3 = 4  # [17-12] when closed more 3 checkers
+    W_CLOSED_II_3 = 5  # [17-12] when closed more 3 checkers
     W_CLOSED_III_B = 6  # indexes [11-6] begin of the game
     W_CLOSED_III_3_B = 10  # indexes [11-6]
     W_CLOSED_III = 4  # indexes [11-6]
     W_CLOSED_III_3 = 4  # indexes [11-6]
     W_CLOSED_IV = 6  # indexes [5-0]
-    W_CLOSED_IV_3 = 9  # indexes [5-0]
+    W_CLOSED_IV_4 = 9  # indexes [5-0]
     #  Additional weight for barrier consists 6 checkers and more
     W_CLOSED_6_TOP = 70  # when closed top of board [11-0]
-    W_CLOSED_6_BOT = 10  # when closed bottom of board [23-12]
+    W_CLOSED_6_BOT = 20  # when closed bottom of board [23-12]
+    # Максимальное кол-во закрытых в доме пипсов, когда их можно не учитывать в весе, т.е.,
+    # например, 1 закрытый пипс у себя в доме особо ничего не значит и так может быть, как правило,
+    # в начале игры
+    HOME_CLOSED_IGNORE_NUM_CHECKERS = 1
+
     #  Amount of home checkers weight
     W_HOME_AMOUNT = 9
     #  When we have checkers in 1st quadrant
     W_HOME_AMOUNT_1 = 5
     #  In the start of game we shouldn't came to home
-    W_NOT_HOME_AMOUNT = -3
+    W_NOT_HOME_AMOUNT = -6
     #  Amount of my out checker
     W_OUT_AMOUNT = 50
     #  Weight of home closed points
@@ -64,20 +69,23 @@ class HeuristicAgent(object):
     W_MIN_INDEX = -1
     #  Weight for amount of closed points on the top and bottom of the board
     W_CLOSED_POINTS_TOP = 7
-    W_CLOSED_POINTS_BOT = 4
+    W_CLOSED_POINTS_BOT = 5
     #  Weight of I-st quadrant of checkers if we have checkers on the Head
-    W_CLOSED_POINTS_I = 9
+    W_CLOSED_POINTS_I = 7
     #  Checkers on the head
-    W_ON_HEAD = -5
-    W_ON_HEAD_BEGIN = -7  # при начале игры
+    W_ON_HEAD = -6
+#    W_ON_HEAD_BEGIN = -7  # при начале игры
     #  Distance of checkers to home
     W_HOME_DISTANCE = -1
     #  Amount of my checkers on the top of the board
     TOP_CHECKERS_SEPARATE = 9
+    # Вес 3го и 5го поинта в своей первой четверти, чтобы эти поинты были несколько весомее
+    #  остальных при прочих равных */
+    W_3_5_PIPS = 1
 
     def __init__(self, player):
         self.player = player
-        self.name = 'Heuristic'
+        self.name = 'Heuristic_New'
 
     def choose_action(self, actions, game):
         actions = list(actions)
@@ -144,6 +152,8 @@ class HeuristicAgent(object):
         # Барьеры оппонента за моим maxIndex с учётом пустых ячеек, т.е. если он потенциально
         # может мне заблокировать шашки. Вносит отрицательный вес.
         enemyBlock = 0
+        # Дополнительный вес 3 и/или 5го пипсов
+        w3_5Pips = 0
 
         # count amount of checkers on the my head
         myHead = self.num_color_checkers(localBoard, self.head_idx(myColor), myColor)
@@ -165,6 +175,10 @@ class HeuristicAgent(object):
                     if self.trans_pos(myColor, i) <= 23 and self.trans_pos(myColor, i) >= 18:
                         closedPointsI += 1
                         totalPointsI += myCheckersAmount
+                        # добавим доп вес 3му и 5му поинтам, если на них есть шашка, но с учётом
+                        # того, что и на голове ещё есть шашки
+                        if myHead > 0 and (self.trans_pos(myColor, i) == 18 or self.trans_pos(myColor, i) == 20):
+                            w3_5Pips += self.W_3_5_PIPS
                 if self.trans_pos(myColor, i) > maxMyIndex:
                     maxMyIndex = self.trans_pos(myColor, i)   # hold max index
                 # не рассматриваем (исключаем) шашки в домике!
@@ -194,11 +208,12 @@ class HeuristicAgent(object):
                 homeAmountWeight = self.W_HOME_AMOUNT_1
         # Удалим из подсчёта шашки, которые находятся за maxEnemyIndex, т.к. они
         #  реально уже ничего не закрывают
-        if maxEnemyIndex < 23 and maxEnemyIndex >= 12:
-            for i in range(maxEnemyIndex + 1, 24):
+        if maxEnemyIndex < 23:
+            startIndex = maxEnemyIndex + 1 if maxEnemyIndex >= 12 else 12
+            for i in range(startIndex, 24):
                 if self.num_color_checkers(localBoard, self.trans_pos(oppColor, i), myColor) > 0:
                     closedPointsTop -= 1
-                    if self.trans_pos(myColor, i) > 5 and self.trans_pos(myColor, i) <= 11:
+                    if i >= 18:
                         closedPointsTop3 -= 1
 
         # найдём кол-во шашек оппа в их первой четверти
@@ -206,7 +221,7 @@ class HeuristicAgent(object):
             checkersAt1 = 0
             for i in range(18, 24):
                 checkersAt1 += self.num_color_checkers(localBoard, self.trans_pos(oppColor, i), oppColor)
-        # find all barriers on the field...
+        # find all barriers on the field... ==========================================================
         for i in range(23, 0, -1):
             bStart = self.INVALID_VALUE
             bEnd = self.INVALID_VALUE
@@ -228,7 +243,7 @@ class HeuristicAgent(object):
                     if bEnd >= 0:
                         i = bEnd
                     # calculate block weight...
-                    blocking += (bStart - bEnd + 1) * \
+                    blocking += (bStart - bEnd) * \
                         self.quadrant_weight(bStart, bEnd, maxMyIndex, maxEnemyIndex,
                                              checkersAt1, oppTopCheckers)
                     # Если блокировка на голове, то надо проверить, что может мы
@@ -240,27 +255,42 @@ class HeuristicAgent(object):
                             k += 1
                         if (bStart - bEnd + 1 + k) >= self.NUM_POINTS:
                             blocking += self.W_CLOSED_6_TOP
-                        elif (bStart - bEnd + 1) + k > 3:
-                            # if closed more 3 points
-                            blocking += self.W_CLOSED_IV_3
+                        elif (bStart - bEnd + 1) + k > 4:
+                            # if closed more 4 points
+                            blocking += self.W_CLOSED_IV_4
                     # check up if we closed 6 or more points
                     if (bStart - bEnd + 1) >= self.NUM_POINTS:
                         blocking += self.quadrant_6_closed_weight(bStart, bEnd)
 
-        # find barriers for opponent
-        continuousBlockExist = False  # непрерывный блок из 5ти шашек (и более)!
-        for i in range(23, 0, -1):
+        # find barriers for opponent ==========================================================
+        i = 23
+        while i > 0:
             if self.num_color_checkers(localBoard, self.trans_pos(oppColor, i), oppColor) > 0 \
                     and maxMyIndex > self.trans_pos(myColor, self.trans_pos(oppColor, i)):
                 pipsWeight = 2    # есть шашка в поинте
                 busyPips = 1
-                continBlock = 1   # непрерывный блок (длина)
                 # ищем барьеры оппонента
                 bStart = i
                 bEnd = i
-                # find end of barrier
+                # мы начинаем рассматривать барьер с занятой шашки, но перед этой шашкой, может
+                # быть пустой пипс, а далее 5 шашек подряд. И такой пипс может быть закрыт
+                # и мы получим "глухой" блок, надо это учесть, поэтому проверим поинт перед
+                # стартовой шашкой, не пустой ли он?
+                if i < 23 and maxEnemyIndex > (i+1) \
+                        and self.num_checkers(localBoard, self.trans_pos(oppColor, i+1)) == 0:
+                    # если он оказался пустой, то увеличиваем вес пустого пипса и сдвигаем
+                    # начало барьера
+                    pipsWeight += 1
+                    bStart += 1
+
+                # find end of barrier...
+                # NOTE: Не рассматриваем барьеры длиннее 6ти пипсов, ибо это не имеет смысла!
+                #      Если будет какой-то барьер длиннее, то он посчитается как 2 (если там
+                #      много занятых шашек, а если там практически пустые поинты, то и толку
+                #      в них нету!
                 j = bEnd - 1
                 while j >= 0 and self.trans_pos(myColor, self.trans_pos(oppColor, j)) < maxMyIndex \
+                        and bStart-bEnd+1 < 6 \
                         and (self.num_color_checkers(localBoard, self.trans_pos(oppColor, j), oppColor) > 0 \
                              or self.num_checkers(localBoard, self.trans_pos(oppColor, j)) == 0):
                     # для чёрных нет смысла смотреть блокировки белых, начинающиеся на верху и
@@ -268,33 +298,32 @@ class HeuristicAgent(object):
                     if myColor == self.BLACK and bStart >= 12 and j < 12:
                         break
                     pipsWeight += 1
-                    if self.num_color_checkers(localBoard, self.trans_pos(oppColor, j),
-                                                oppColor) > 0:
+                    if self.num_color_checkers(localBoard, self.trans_pos(oppColor, j), oppColor) > 0:
                         # увеличиваем вес пипса, если в нём есть шашка, а не пустой он
                         pipsWeight += 1
                         busyPips += 1
-                        continBlock += 1
-                    else:
-                        continuousBlockExist = (continBlock >= 5 or continuousBlockExist)
-                        continBlock = 0
                     j -= 1
                     bEnd -= 1
-                bLen = bStart-bEnd+1
-                if bLen > 1:
-                    if bLen < 6 and (bLen - busyPips > 1 or bLen == 2):
-                        enemyBlock -= pipsWeight
+                # считаем длину блока...
+                blockLen = bStart-bEnd+1
+
+                if blockLen == 6:
+                    if busyPips == 5:
+                        enemyBlock -= 6*pipsWeight  # могут заблокировать!
+                    elif busyPips == 4:
+                        enemyBlock -= 3*pipsWeight  # всего 2 пустых поинта из 4х - тоже потенциальный блок!
                     else:
-                        if busyPips > 3 and busyPips > (bLen - busyPips):
-                            enemyBlock -= 4*pipsWeight    # могут заблокировать!
-                        else:
-                            if busyPips * 2 < bLen:
-                                enemyBlock -= pipsWeight    # не так страшно...
-                            else:
-                                enemyBlock -= 2*pipsWeight  # чуть хуже...
-                        # уже 5 поинтов подряд закрыты и могут закрыть 6ой!
-                        if continuousBlockExist:
-                            enemyBlock -= 15
-                    i = bEnd - 1
+                        enemyBlock -= pipsWeight
+                elif blockLen > 1:
+                    # blockLen < 6 && > 1
+                    if blockLen - busyPips == 1 and blockLen > 3:
+                        enemyBlock -= 2*pipsWeight
+                    else:
+                        enemyBlock -= pipsWeight
+
+                i = bEnd - 1
+
+            i -= 1
 
         # пересчитаем некоторые веса и переменные в зависисмости от определённых ситуаций
 
@@ -321,36 +350,32 @@ class HeuristicAgent(object):
             #  лишь для того, чтобы закрыть поинт было лучше, чем оставить его открытытм и всё.
             #  Т.е. чтобы ИИ старался всё-таки не отсавлять пустых поинтов в домике, при прочих
             #  равных, чтобы потом легче было выбрасывать шашки
-            if maxEnemyIndex < 14:
+            if maxEnemyIndex <= 14:
                 wClosedHome = self.W_CLOSED_HOME_END
-        # добавим вес шашек в нашей 3ей четверти при начале игры
-        if myHead > 5 and homeAmount < 5:
-            closedPointsTop3 = self.W_CLOSED_III_B * closedPointsTop3
-        else:
-            closedPointsTop3 = 0
         # учтём ещё такой фактор для вывода последний шашки, когда уже нет шашек на голове
         #  чтобы ИИ не оставлял их, а при ходе отдавал предпочтение именно последней шашке.
         #  Т.е. усилю вес расстояния между головой и последней шашкой - чем больше, тем лучше!
         lastCheckerWeight = (23 - maxMyIndex)
         if oppTopCheckers > 10 or maxMyIndex > 18:
             # под самый конец игры важенне уводить дальние шашки!!!
-            lastCheckerWeight *= 3
+            lastCheckerWeight *= 4
         else:
             lastCheckerWeight *= 2
 
         # calculating final evaluation...
         return homeAmountWeight * homeAmount \
-            + wClosedHome * closedHomePoints \
+            + wClosedHome * ((closedHomePoints - self.HOME_CLOSED_IGNORE_NUM_CHECKERS) if closedHomePoints > 0 else 0) \
             + self.W_OUT_AMOUNT * myOutCheckers \
             + (self.W_MAX_INDEX_1 * maxMyIndex if (maxEnemyIndex < 13)
                else self.W_MAX_INDEX * maxMyIndex) \
             + lastCheckerWeight \
-            + ((self.W_ON_HEAD_BEGIN if myHead > 8 else self.W_ON_HEAD) * myHead) \
+            + self.W_ON_HEAD * myHead \
             + (0 if (maxEnemyIndex < 15) else self.W_CLOSED_POINTS_TOP * closedPointsTop) \
             + (0 if (maxEnemyIndex <= 5) else self.W_CLOSED_POINTS_BOT * closedPointsBot) \
-            + closedPointsTop3 \
+            + self.W_CLOSED_III_B * closedPointsTop3 \
             + self.W_CLOSED_POINTS_I * closedPointsI \
             + totalPointsI \
+            + w3_5Pips \
             + blocking \
             + self.W_HOME_DISTANCE * distance \
             + (self.W_MIN_INDEX * minMyIndex if oppTopCheckers == 15
@@ -387,7 +412,7 @@ class HeuristicAgent(object):
 #      * @param maxBlackIndex - max value of index of black checkers;
 #      * @param maxWhiteIndex - max index of white checkers;
 #      * @param white1 - amount of white checkers in their 1st quadrant;
-#      * @param white34 - amount of white checkers in their 3d and 4th quadrant
+#      * @param white34 - amount of opponent's checkers in his 3d and 4th quadrant (top of the Board)
 #      * @return appropriate quadrant's weight.
 #      */
     def quadrant_weight(self, start, end, maxBlackIndex, maxWhiteIndex, white1, white34):
@@ -410,11 +435,11 @@ class HeuristicAgent(object):
             # поинты важнее, чем если своих шашек за загрождением уже нет.
             if white34 > 8 and maxBlackIndex > 17 and maxBlackIndex != start:
                 return self.W_CLOSED_I_3
-            return self.W_CLOSED_I_3 if blen > 3 else self.W_CLOSED_I
+            return self.W_CLOSED_I_3_B if blen > 4 else self.W_CLOSED_I
         if idx >= self.INDEX_LEFT_TOP:
             # не открываем пока закрытый домик!
-            if blen == 4 and maxBlackIndex <= start and start == 17:
-                return 4
+            if blen == 4 and maxBlackIndex >= start and start == 17:
+                return self.W_CLOSED_II_3
             # не имеет смысл закрывать первую четверть, если белые уже пришли,
             #  заграждение мало (меньше 5) и у чёрных не осталось шашек за заграждением
             if maxWhiteIndex < 12 and blen < 5 and maxBlackIndex <= start:
@@ -428,7 +453,7 @@ class HeuristicAgent(object):
             return self.W_CLOSED_III_3_B if blen > 3 else self.W_CLOSED_III_B
         if idx >= self.INDEX_RIGHT_BOT:
             # если блок всего из двух шашек, то делаем вес поменьше
-            return self.W_CLOSED_IV_3 if blen > 3 else (3 if blen == 2 else self.W_CLOSED_IV)
+            return self.W_CLOSED_IV_4 if blen > 4 else (3 if blen == 2 else self.W_CLOSED_IV)
         return self.W_CLOSED_I
 
 #     /**
