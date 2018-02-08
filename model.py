@@ -4,25 +4,17 @@ import time
 import random
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import layers
 
 from gammon.game import Game
 from gammon.agents.human_agent import HumanAgent
-from gammon.agents.random_agent import RandomAgent
 from gammon.agents.td_gammon_agent import TDAgent
-
-
-# helper to initialize a weight and bias variable
-def weight_bias(shape):
-    W = tf.Variable(tf.truncated_normal(shape, stddev=0.1), name='weight')
-    b = tf.Variable(tf.constant(0.1, shape=shape[-1:]), name='bias')
-    return W, b
+from gammon.agents.heuristic_agent import HeuristicAgent
 
 
 # helper to create a dense, fully-connected layer
-def dense_layer(x, shape, activation, name):
-    with tf.variable_scope(name):
-        W, b = weight_bias(shape)
-        return activation(tf.matmul(x, W) + b, name='activation')
+def dense_layer(x, size, activation, name):
+    return layers.fully_connected(x, size, activation_fn=activation, scope=name)
 
 
 class Model(object):
@@ -36,30 +28,28 @@ class Model(object):
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # lambda decay
-        lamda = tf.maximum(0.7, tf.train.exponential_decay(
+        lambda_ = tf.maximum(0.7, tf.train.exponential_decay(
             0.9, self.global_step, 30000, 0.96, staircase=True), name='lambda')
 
         # learning rate decay
         alpha = tf.maximum(0.01, tf.train.exponential_decay(
             0.1, self.global_step, 40000, 0.96, staircase=True), name='alpha')
 
-        tf.summary.scalar('lambda', lamda)
+        tf.summary.scalar('lambda', lambda_)
         tf.summary.scalar('alpha', alpha)
 
         # describe network size
-        layer_size_input = 294
-        layer_size_hidden = 50
+        layer_size_input = 100
+        layer_size_hidden = 64
         layer_size_output = 1
 
         # placeholders for input and target output
         self.x = tf.placeholder('float', [None, layer_size_input], name='x')
         self.V_next = tf.placeholder('float', [1, layer_size_output], name='V_next')
 
-        # build network arch. (just 2 layers with sigmoid activation)
-        prev_y = dense_layer(self.x, [layer_size_input, layer_size_hidden],
-                             tf.sigmoid, name='layer1')
-        self.V = dense_layer(prev_y, [layer_size_hidden, layer_size_output],
-                             tf.sigmoid, name='layer2')
+        # build network arch
+        hidden = dense_layer(self.x, layer_size_hidden, tf.sigmoid, name='hidden')
+        self.V = dense_layer(hidden, layer_size_output, tf.sigmoid, name='V')
 
         # watch the individual value predictions over time
         tf.summary.scalar('V_next', tf.reduce_sum(self.V_next))
@@ -69,7 +59,7 @@ class Model(object):
         delta_op = tf.reduce_sum(self.V_next - self.V, name='delta')
 
         # mean squared error of the difference between the next state and the current state
-        loss_op = tf.reduce_mean(tf.square(self.V_next - self.V), name='loss')
+        loss_op = tf.reduce_mean(tf.squared_difference(self.V_next, self.V), name='loss')
 
         # check if the model predicts the correct state
         accuracy_op = tf.reduce_sum(tf.cast(tf.equal(tf.round(self.V_next), tf.round(self.V)),
@@ -132,7 +122,7 @@ class Model(object):
                 with tf.variable_scope('trace'):
                     # e-> = lambda * e-> + <grad of output w.r.t weights>
                     trace = tf.Variable(tf.zeros(grad.get_shape()), trainable=False, name='trace')
-                    trace_op = trace.assign((lamda * trace) + grad)
+                    trace_op = trace.assign((lambda_ * trace) + grad)
                     tf.summary.histogram(var.name + '/traces', trace)
 
                 # grad with trace = alpha * delta * e
@@ -179,12 +169,10 @@ class Model(object):
         features = []
         for p in game.players:
             for col in game.grid:
-                feats = [0.]*6
-                if len(col) > 0 and col[0] == p:
-                    for i in range(len(col)):
-                        feats[min(i, 5)] += 1
-                features += feats
-            features.append(0.)  # FIXME bar
+                if col and col[0] == p:
+                    features += [1., float(len(col))/game.num_pieces[p]]
+                else:
+                    features += [0., 0.]
             features.append(float(len(game.off_pieces[p]))/game.num_pieces[p])
         if player == game.players[0]:
             features += [1., 0.]
@@ -200,7 +188,7 @@ class Model(object):
         game.play([HumanAgent(Game.PLAYERS[0]), TDAgent(Game.PLAYERS[1], self)], draw=True)
 
     def test(self, episodes=100, draw=False, full_stats=True):
-        player_agents = [TDAgent(Game.PLAYERS[0], self), RandomAgent(Game.PLAYERS[1])]
+        player_agents = [TDAgent(Game.PLAYERS[0], self), HeuristicAgent(Game.PLAYERS[1])]
         num_steps = 0
         winners = [0, 0]
         for episode in range(1, episodes+1):
