@@ -5,6 +5,7 @@ import random
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import layers
+from tensorflow.python.ops import nn
 
 from gammon.game import Game
 from gammon.agents.human_agent import HumanAgent
@@ -18,6 +19,18 @@ def dense_layer(x, size, activation, name):
 
 
 class Model(object):
+    # Learning rate
+    learning_rate = .0001
+
+    # Min (x, r, x_next) history size
+    min_train_history_size = 300
+
+    # Max (x, r, x_next) history size
+    max_train_history_size = 3000000
+
+    # Train minibatch size
+    minibatch_size = 32
+
     def __init__(self, sess, model_path, summary_path, checkpoint_path, restore=False):
         self.model_path = model_path
         self.summary_path = summary_path
@@ -25,18 +38,7 @@ class Model(object):
 
         # setup our session
         self.sess = sess
-        self.global_step = tf.Variable(0, trainable=False, name='global_step')
-
-        # lambda decay
-        lambda_ = tf.maximum(0.7, tf.train.exponential_decay(
-            0.9, self.global_step, 30000, 0.96, staircase=True), name='lambda')
-
-        # learning rate decay
-        alpha = tf.maximum(0.01, tf.train.exponential_decay(
-            0.1, self.global_step, 40000, 0.96, staircase=True), name='alpha')
-
-        tf.summary.scalar('lambda', lambda_)
-        tf.summary.scalar('alpha', alpha)
+        global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # describe network size
         layer_size_input = 100
@@ -45,7 +47,7 @@ class Model(object):
 
         # placeholders for input and target output
         self.x = tf.placeholder('float', [None, layer_size_input], name='x')
-        self.V_next = tf.placeholder('float', [1, layer_size_output], name='V_next')
+        self.V_next = tf.placeholder('float', [None, layer_size_output], name='V_next')
 
         # build network arch
         hidden = dense_layer(self.x, layer_size_hidden, tf.sigmoid, name='hidden')
@@ -55,96 +57,25 @@ class Model(object):
         tf.summary.scalar('V_next', tf.reduce_sum(self.V_next))
         tf.summary.scalar('V', tf.reduce_sum(self.V))
 
-        # delta = V_next - V
-        delta_op = tf.reduce_sum(self.V_next - self.V, name='delta')
-
         # mean squared error of the difference between the next state and the current state
         loss_op = tf.reduce_mean(tf.squared_difference(self.V_next, self.V), name='loss')
 
-        # check if the model predicts the correct state
-        accuracy_op = tf.reduce_sum(tf.cast(tf.equal(tf.round(self.V_next), tf.round(self.V)),
-                                            dtype='float'), name='accuracy')
-
         # track the number of steps and average loss for the current game
         with tf.variable_scope('game'):
-            game_step = tf.Variable(tf.constant(0.0), name='game_step', trainable=False)
-            game_step_op = game_step.assign_add(1.0)
+            loss_ema = tf.train.ExponentialMovingAverage(decay=0.999)
 
-            loss_sum = tf.Variable(tf.constant(0.0), name='loss_sum', trainable=False)
-            delta_sum = tf.Variable(tf.constant(0.0), name='delta_sum', trainable=False)
-            accuracy_sum = tf.Variable(tf.constant(0.0), name='accuracy_sum', trainable=False)
+            loss_avg_op = loss_ema.apply([loss_op])
 
-            loss_avg_ema = tf.train.ExponentialMovingAverage(decay=0.999)
-            delta_avg_ema = tf.train.ExponentialMovingAverage(decay=0.999)
-            accuracy_avg_ema = tf.train.ExponentialMovingAverage(decay=0.999)
+            tf.summary.scalar('game/loss_ema', loss_ema.average(loss_op))
 
-            loss_sum_op = loss_sum.assign_add(loss_op)
-            delta_sum_op = delta_sum.assign_add(delta_op)
-            accuracy_sum_op = accuracy_sum.assign_add(accuracy_op)
-
-            loss_avg_op = loss_sum / tf.maximum(game_step, 1.0)
-            delta_avg_op = delta_sum / tf.maximum(game_step, 1.0)
-            accuracy_avg_op = accuracy_sum / tf.maximum(game_step, 1.0)
-
-            loss_avg_ema_op = loss_avg_ema.apply([loss_avg_op])
-            delta_avg_ema_op = delta_avg_ema.apply([delta_avg_op])
-            accuracy_avg_ema_op = accuracy_avg_ema.apply([accuracy_avg_op])
-
-            tf.summary.scalar('game/loss_avg', loss_avg_op)
-            tf.summary.scalar('game/delta_avg', delta_avg_op)
-            tf.summary.scalar('game/accuracy_avg', accuracy_avg_op)
-            tf.summary.scalar('game/loss_avg_ema', loss_avg_ema.average(loss_avg_op))
-            tf.summary.scalar('game/delta_avg_ema', delta_avg_ema.average(delta_avg_op))
-            tf.summary.scalar('game/accuracy_avg_ema', accuracy_avg_ema.average(accuracy_avg_op))
-
-            # reset per-game monitoring variables
-            game_step_reset_op = game_step.assign(0.0)
-            loss_sum_reset_op = loss_sum.assign(0.0)
-            self.reset_op = tf.group(*[loss_sum_reset_op, game_step_reset_op])
-
-        # increment global step: we keep this as a variable so it's saved with checkpoints
-        global_step_op = self.global_step.assign_add(1)
-
-        # get gradients of output V wrt trainable variables (weights and biases)
-        tvars = tf.trainable_variables()
-        grads = tf.gradients(self.V, tvars)
-
-        # watch the weight and gradient distributions
-        for grad, var in zip(grads, tvars):
-            tf.summary.histogram(var.name, var)
-            tf.summary.histogram(var.name + '/gradients/grad', grad)
-
-        # for each variable, define operations to update the var with delta,
-        # taking into account the gradient as part of the eligibility trace
-        apply_gradients = []
-        with tf.variable_scope('apply_gradients'):
-            for grad, var in zip(grads, tvars):
-                with tf.variable_scope('trace'):
-                    # e-> = lambda * e-> + <grad of output w.r.t weights>
-                    trace = tf.Variable(tf.zeros(grad.get_shape()), trainable=False, name='trace')
-                    trace_op = trace.assign((lambda_ * trace) + grad)
-                    tf.summary.histogram(var.name + '/traces', trace)
-
-                # grad with trace = alpha * delta * e
-                grad_trace = alpha * delta_op * trace_op
-                tf.summary.histogram(var.name + '/gradients/trace', grad_trace)
-
-                grad_apply = var.assign_add(grad_trace)
-                apply_gradients.append(grad_apply)
+        optimizer = tf.train.AdamOptimizer(self.learning_rate)
 
         # as part of training we want to update our step and other monitoring variables
         with tf.control_dependencies([
-            global_step_op,
-            game_step_op,
-            loss_sum_op,
-            delta_sum_op,
-            accuracy_sum_op,
-            loss_avg_ema_op,
-            delta_avg_ema_op,
-            accuracy_avg_ema_op
+            loss_avg_op,
         ]):
             # define single operation to apply all gradient updates
-            self.train_op = tf.group(*apply_gradients, name='train')
+            self.train_op = optimizer.minimize(loss_op, global_step=global_step, name='train')
 
         # merge summaries for TensorBoard
         self.summaries_op = tf.summary.merge_all()
@@ -178,7 +109,7 @@ class Model(object):
             features += [1., 0.]
         else:
             features += [0., 1.]
-        return np.array(features).reshape(1, -1)
+        return features
 
     def get_output(self, x):
         return self.sess.run(self.V, feed_dict={self.x: x})
@@ -226,21 +157,64 @@ class Model(object):
         # the agent plays against itself, making the best move for each player
         player_agents = [TDAgent(Game.PLAYERS[0], self), TDAgent(Game.PLAYERS[1], self)]
 
+        # train (x, r, x_next) history for experience replay
+        train_history = []
+
         for episode in range(1, episodes+1):
             game = Game.new()
             player_index = random.randint(0, 1)
 
-            x = self.extract_features(game, player_agents[player_index].player)
+            x_next = self.extract_features(game, player_agents[player_index].player)
 
             while not game.is_over():
+                x = x_next
+
                 game.next_step(player_agents[player_index])
                 player_index = (player_index+1) % 2
 
-                x_next = self.extract_features(game, player_agents[player_index].player)
-                V_next = self.get_output(x_next)
-                self.sess.run(self.train_op, feed_dict={self.x: x, self.V_next: V_next})
+                if game.is_over():
+                    x_next = None
+                    r = float(game.winner())
+                else:
+                    x_next = self.extract_features(game, player_agents[player_index].player)
+                    r = 0
 
-                x = x_next
+                train_history.append([x, r, x_next])
+
+                # update network only if enough train history data is obtained
+                if len(train_history) >= self.min_train_history_size:
+                    # Trim (x, r, x_next) train_history
+                    if len(train_history) > self.max_train_history_size:
+                        del train_history[:(len(train_history)-self.max_train_history_size)]
+
+                    train_minibatch = np.array(random.sample(train_history, self.minibatch_size))
+
+                    # get boolean mask array of terminal states
+                    states_terminal = np.zeros(train_minibatch.shape[0], dtype=bool)
+                    states_terminal[np.where(np.equal(train_minibatch[:, 2], None))] = True
+                    states_non_terminal = ~states_terminal
+
+                    # array of minibatch state rewards
+                    r_batch = train_minibatch[:, 1]
+
+                    # array of v_next_batch values to compute
+                    v_next_batch = np.zeros(train_minibatch.shape[0], dtype=np.float32)
+
+                    # for terminal states: v_next_batch = r_batch
+                    v_next_batch[states_terminal] = r_batch[states_terminal]
+
+                    # for non-terminal states: v_next_batch = r_batch + get_output(x_next)
+                    v_next_batch[states_non_terminal] = r_batch[states_non_terminal] + \
+                        self.get_output(list(train_minibatch[states_non_terminal, 2])).flatten()
+
+                    x_batch = train_minibatch[:, 0]
+
+                    # reshape v_next to (32, 1) shape
+                    v_next_batch = v_next_batch.reshape(-1, 1)
+
+                    # update network by minibatch
+                    self.sess.run(self.train_op, feed_dict={self.x: list(x_batch),
+                                                            self.V_next: v_next_batch})
 
             winner = game.winner()
 
@@ -248,23 +222,17 @@ class Model(object):
                                                                 player_agents[winner].player,
                                                                 game.num_steps))
 
-            _, global_step, _ = self.sess.run([
-                self.train_op,
-                self.global_step,
-                self.reset_op
-            ], feed_dict={self.x: x, self.V_next: np.array([[winner]], dtype='float')})
-
             # write summary every summary_interval
             if episode % summary_interval == 0 or episode == episodes:
                 summaries = self.sess.run(
                     self.summaries_op,
-                    feed_dict={self.x: x, self.V_next: np.array([[winner]], dtype='float')}
+                    feed_dict={self.x: [x], self.V_next: np.array([[r]], dtype='float')}
                 )
-                summary_writer.add_summary(summaries, global_step=global_step)
+                summary_writer.add_summary(summaries, global_step=episode)
             # save checkpoint every checkpoint_interval
             if episode % checkpoint_interval == 0 or episode == episodes:
                 self.saver.save(self.sess, self.checkpoint_path+'checkpoint',
-                                global_step=global_step)
+                                global_step=episode)
             # play test games every test_interval
             if episode % test_interval == 0 or episode == episodes:
                 self.test(episodes=test_episodes, full_stats=False)

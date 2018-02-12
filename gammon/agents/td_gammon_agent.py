@@ -15,11 +15,14 @@ class TDAgent(object):
         """
         actions = list(actions)
 
+        if len(actions) == 1:
+            return actions[0]
+
         features = []
 
         for a in actions:
             game.take_action(a, self.player)
-            features.extend(self.model.extract_features(game, game.opponent(self.player)))
+            features.append(self.model.extract_features(game, game.opponent(self.player)))
             game.undo_action(a, self.player)
 
         v = self.model.get_output(features)
