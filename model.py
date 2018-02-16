@@ -2,7 +2,9 @@ from __future__ import division
 
 import time
 import random
+
 import numpy as np
+
 import tensorflow as tf
 from tensorflow.contrib import layers
 from tensorflow.python.ops import nn
@@ -11,11 +13,6 @@ from gammon.game import Game
 from gammon.agents.human_agent import HumanAgent
 from gammon.agents.td_gammon_agent import TDAgent
 from gammon.agents.heuristic_agent import HeuristicAgent
-
-
-# helper to create a dense, fully-connected layer
-def dense_layer(x, size, activation, name):
-    return layers.fully_connected(x, size, activation_fn=activation, scope=name)
 
 
 class Model(object):
@@ -41,17 +38,34 @@ class Model(object):
         global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # describe network size
-        layer_size_input = 100
-        layer_size_hidden = 64
+        layer_size_hidden = 80
         layer_size_output = 1
 
         # placeholders for input and target output
-        self.x = tf.placeholder('float', [None, layer_size_input], name='x')
-        self.V_next = tf.placeholder('float', [None, layer_size_output], name='V_next')
+        self.x = tf.placeholder(tf.float32,
+                                [None, 4*len(Game.PLAYERS), Game.NUM_POSITIONS],
+                                name='x')
+        self.V_next = tf.placeholder(tf.float32, [None, layer_size_output], name='V_next')
 
-        # build network arch
-        hidden = dense_layer(self.x, layer_size_hidden, tf.sigmoid, name='hidden')
-        self.V = dense_layer(hidden, layer_size_output, tf.sigmoid, name='V')
+        # inputs shape: [batch, channel, grid] need to be changed into
+        # shape [batch, grid, channel]
+        xt = tf.transpose(self.x, [0, 2, 1])
+
+        # first convolution layer
+        xc1 = layers.conv2d(xt, 16, kernel_size=6, stride=1, padding='VALID', scope='xc1')
+
+        # second convolution layer
+        xc2 = layers.conv2d(xc1, 32, kernel_size=4, stride=1, padding='VALID', scope='xc2')
+
+        # flatten last convolution layer
+        xf = layers.flatten(xc2, scope='xf')
+
+        # fully connected layer
+        xfc = layers.fully_connected(xf, layer_size_hidden, scope='fc')
+
+        # output layer
+        self.V = layers.fully_connected(xfc, layer_size_output,
+                                        activation_fn=nn.sigmoid, scope='V')
 
         # watch the individual value predictions over time
         tf.summary.scalar('V_next', tf.reduce_sum(self.V_next))
@@ -66,7 +80,7 @@ class Model(object):
 
             loss_avg_op = loss_ema.apply([loss_op])
 
-            tf.summary.scalar('game/loss_ema', loss_ema.average(loss_op))
+            tf.summary.scalar('loss_ema', loss_ema.average(loss_op))
 
         optimizer = tf.train.AdamOptimizer(self.learning_rate)
 
@@ -76,6 +90,9 @@ class Model(object):
         ]):
             # define single operation to apply all gradient updates
             self.train_op = optimizer.minimize(loss_op, global_step=global_step, name='train')
+
+        self.win_rate = tf.Variable(0.)
+        tf.summary.scalar("game/win_rate", self.win_rate)
 
         # merge summaries for TensorBoard
         self.summaries_op = tf.summary.merge_all()
@@ -99,17 +116,26 @@ class Model(object):
     def extract_features(self, game, player):
         features = []
         for p in game.players:
-            for col in game.grid:
-                if col and col[0] == p:
-                    features += [1., float(len(col))/game.num_pieces[p]]
-                else:
-                    features += [0., 0.]
-            features.append(float(len(game.off_pieces[p]))/game.num_pieces[p])
-        if player == game.players[0]:
-            features += [1., 0.]
-        else:
-            features += [0., 1.]
+            features.extend(self.extract_player_features(game, p, player == p))
         return features
+
+    def extract_player_features(self, game, player, player_move):
+        f = []
+        f1 = []
+        f2 = []
+        n = game.num_pieces[player]
+        for col in game.grid:
+            if col and col[0] == player:
+                f1.append(1.)
+                f2.append(float(len(col))/n)
+            else:
+                f1.append(0.)
+                f2.append(0.)
+        f.append(f1)
+        f.append(f2)
+        f.append([float(len(game.off_pieces[player]))/n]*len(game.grid))
+        f.append([1. if player_move else 0.]*len(game.grid))
+        return f
 
     def get_output(self, x):
         return self.sess.run(self.V, feed_dict={self.x: x})
@@ -131,20 +157,22 @@ class Model(object):
 
             winners_total = sum(winners)
 
+            win_rate = (winners[0]/winners_total)*100.
+
             if full_stats:
                 print("[Test %d/%d] %s (%s) vs %s (%s), steps: %d, wins: %d:%d (%.1f%%)" %
                       (episode, episodes,
                        player_agents[0].name, player_agents[0].player,
                        player_agents[1].name, player_agents[1].player,
-                       game.num_steps, winners[0], winners[1],
-                       (winners[0]/winners_total)*100.0))
+                       game.num_steps, winners[0], winners[1], win_rate))
 
         print("\nPlayed %d test games %s (%s) vs %s (%s), mean steps: %.1f, "
               "wins: %d/%d, win ratio: %.1f%%" %
               (winners_total, player_agents[0].name, player_agents[0].player,
                player_agents[1].name, player_agents[1].player,
-               num_steps/winners_total, winners[0], winners[1],
-               (winners[0]/winners_total)*100.0))
+               num_steps/winners_total, winners[0], winners[1], win_rate))
+
+        return win_rate
 
     def train(self, episodes=5000, test_interval=1000, test_episodes=100,
               checkpoint_interval=1000, summary_interval=100):
@@ -159,6 +187,8 @@ class Model(object):
 
         # train (x, r, x_next) history for experience replay
         train_history = []
+
+        win_rate = 0.
 
         for episode in range(1, episodes+1):
             game = Game.new()
@@ -222,20 +252,20 @@ class Model(object):
                                                                 player_agents[winner].player,
                                                                 game.num_steps))
 
+            # play test games every test_interval
+            if episode % test_interval == 0 or episode == episodes:
+                win_rate = self.test(episodes=test_episodes, full_stats=False)
             # write summary every summary_interval
             if episode % summary_interval == 0 or episode == episodes:
                 summaries = self.sess.run(
                     self.summaries_op,
-                    feed_dict={self.x: [x], self.V_next: np.array([[r]], dtype='float')}
+                    feed_dict={self.x: [x], self.V_next: np.array([[r]]), self.win_rate: win_rate}
                 )
                 summary_writer.add_summary(summaries, global_step=episode)
             # save checkpoint every checkpoint_interval
             if episode % checkpoint_interval == 0 or episode == episodes:
                 self.saver.save(self.sess, self.checkpoint_path+'checkpoint',
                                 global_step=episode)
-            # play test games every test_interval
-            if episode % test_interval == 0 or episode == episodes:
-                self.test(episodes=test_episodes, full_stats=False)
 
         summary_writer.close()
 
