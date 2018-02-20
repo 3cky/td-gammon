@@ -36,6 +36,9 @@ class Model(nn.Module):
     # Max (x, r, x_next) history size
     max_train_history_size = 3000000
 
+    # Train per steps
+    train_steps = 4
+
     # Train minibatch size
     minibatch_size = 32
 
@@ -182,12 +185,15 @@ class Model(nn.Module):
             game = Game.new()
             player_index = random.randint(0, 1)
 
+            global_step = 0
+
             x_next = self.extract_features(game, player_agents[player_index].player)
 
             while not game.is_over():
                 x = x_next
 
                 game.next_step(player_agents[player_index])
+                global_step += 1
                 player_index = (player_index+1) % 2
 
                 if game.is_over():
@@ -199,13 +205,16 @@ class Model(nn.Module):
 
                 train_history.append([x, r, x_next])
 
-                # update network only if enough train history data is obtained
-                if len(train_history) >= self.min_train_history_size:
-                    # Trim (x, r, x_next) train_history
-                    if len(train_history) > self.max_train_history_size:
-                        del train_history[:(len(train_history)-self.max_train_history_size)]
+                # trim (x, r, x_next) train_history
+                if len(train_history) > self.max_train_history_size:
+                    del train_history[:(len(train_history)-self.max_train_history_size)]
 
-                    train_minibatch = np.array(random.sample(train_history, self.minibatch_size))
+                # update network every train_steps if enough train history data is obtained
+                if len(train_history) >= self.min_train_history_size and \
+                        (global_step % self.train_steps == 0 or
+                            (episode == episodes and game.is_over())):
+                    train_minibatch = np.array(random.sample(train_history,
+                                                             self.minibatch_size*self.train_steps))
 
                     # get boolean mask array of terminal states
                     states_terminal = np.zeros(train_minibatch.shape[0], dtype=bool)
