@@ -1,5 +1,6 @@
 from __future__ import division
 
+import os
 import time
 import random
 
@@ -106,10 +107,11 @@ class Model(nn.Module):
 
     def save(self, episode):
         checkpoint = {'episode': episode, 'state_dict': self.state_dict()}
-        torch.save(checkpoint, self.checkpoint_path+self.checkpoint_file_name)
+        torch.save(checkpoint, os.path.join(self.checkpoint_path, self.checkpoint_file_name))
 
     def restore(self):
-        checkpoint = torch.load(self.checkpoint_path+self.checkpoint_file_name)
+        checkpoint = torch.load(os.path.join(self.checkpoint_path, self.checkpoint_file_name),
+                                map_location=lambda storage, _loc: storage)
         self.load_state_dict(checkpoint['state_dict'])
         print('Restored checkpoint, train episodes: {0}'.format(checkpoint['episode']))
 
@@ -181,7 +183,7 @@ class Model(nn.Module):
 
         summary_tstamp = str(int(time.time()))
         summary_name = summary_tstamp+'-'+summary_name if summary_name else summary_tstamp
-        summary_writer = SummaryWriter(self.summary_path+'/'+summary_name)
+        summary_writer = SummaryWriter(os.path.join(self.summary_path, summary_name))
 
         # the agent plays against itself, making the best move for each player
         player_agents = [TDAgent(Game.PLAYERS[0], self), TDAgent(Game.PLAYERS[1], self)]
