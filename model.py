@@ -1,5 +1,6 @@
 from __future__ import division
 
+import time
 import random
 
 import numpy as np
@@ -9,6 +10,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+
+from tensorboardX import SummaryWriter
 
 from gammon.game import Game
 from gammon.agents.human_agent import HumanAgent
@@ -42,9 +45,10 @@ class Model(nn.Module):
     # Train minibatch size
     minibatch_size = 32
 
-    def __init__(self, checkpoint_path, restore=False):
+    def __init__(self, summaries_path, checkpoints_path, restore=False):
         super(Model, self).__init__()
-        self.checkpoint_path = checkpoint_path
+        self.summary_path = summaries_path
+        self.checkpoint_path = checkpoints_path
 
         # describe network size
         layer_size_hidden = 80
@@ -172,14 +176,20 @@ class Model(nn.Module):
         return win_rate
 
     def train(self, episodes=5000, test_interval=1000, test_episodes=100,
-              checkpoint_interval=1000):
+              checkpoint_interval=1000, summary_interval=1000, summary_name=None):
         print("Training started.\n")
+
+        summary_tstamp = str(int(time.time()))
+        summary_name = summary_tstamp+'-'+summary_name if summary_name else summary_tstamp
+        summary_writer = SummaryWriter(self.summary_path+'/'+summary_name)
 
         # the agent plays against itself, making the best move for each player
         player_agents = [TDAgent(Game.PLAYERS[0], self), TDAgent(Game.PLAYERS[1], self)]
 
         # (x, r, x_next) train history for experience replay
         train_history = []
+
+        win_rate = 0.
 
         for episode in range(1, episodes+1):
             game = Game.new()
@@ -250,9 +260,14 @@ class Model(nn.Module):
 
             # play test games every test_interval
             if episode % test_interval == 0 or episode == episodes:
-                self.test(episodes=test_episodes, full_stats=False)
+                win_rate = self.test(episodes=test_episodes, full_stats=False)
+            # write summary every summary_interval
+            if episode % summary_interval == 0 or episode == episodes:
+                summary_writer.add_scalar('game/win_rate', win_rate, global_step=episode)
             # save checkpoint every checkpoint_interval
             if episode % checkpoint_interval == 0 or episode == episodes:
                 self.save(episode)
+
+        summary_writer.close()
 
         print("\nTraining completed.")
