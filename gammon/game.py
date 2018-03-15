@@ -6,7 +6,7 @@ import random
 
 class Game:
 
-    LAYOUT = "11-15-x,23-15-o"
+    LAYOUT = "12-15-x,24-15-o"
     NUM_POSITIONS = 24
     NUM_PIECES = 15
     QUAD = 6
@@ -264,12 +264,19 @@ class Game:
         """
         Resets game to original layout.
         """
-        for col in self.layout.split(','):
-            loc, num, player = col.split('-')
-            self.grid[int(loc)] = [player for _ in range(int(num))]
+        for l in self.layout.split(','):
+            loc, num, player = l.strip().split('-')
+            assert player in self.players
+            if loc == self.OFF:
+                self.off_pieces[player] = list(player)*int(num)
+            else:
+                self.grid[int(loc)-1] = list(player)*int(num)
         for col in self.grid:
             for piece in col:
                 self.num_pieces[piece] += 1
+        for p in self.players:
+            self.num_pieces[p] += len(self.off_pieces[p])
+            assert self.num_pieces[p] == self.NUM_PIECES
 
     def winner(self):
         """
