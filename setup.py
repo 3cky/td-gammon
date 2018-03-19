@@ -5,7 +5,6 @@ setup(
     name=PROJECT,
     packages=[
         'gammon',
-        'models',
         '',
     ],
     version='0.1.0',
