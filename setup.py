@@ -5,6 +5,7 @@ setup(
     name=PROJECT,
     packages=[
         'gammon',
+        'gammon.agents',
         '',
     ],
     version='0.1.0',
